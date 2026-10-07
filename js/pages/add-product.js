@@ -191,6 +191,101 @@
     });
   }
 
+  // ---------- Google Sheet Import ----------
+  const sheetInput = document.getElementById("googleSheetUrlInput");
+  const loadSheetBtn = document.getElementById("loadGoogleSheetBtn");
+  const sheetStatus = document.getElementById("sheetStatusLabel");
+
+  if (loadSheetBtn && sheetInput) {
+    loadSheetBtn.addEventListener("click", async () => {
+      const url = (sheetInput.value || "").trim();
+      if (!url) {
+        return UI.toast("দয়া করে Google Sheet এর লিঙ্ক দিন।", "err");
+      }
+
+      const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (!idMatch) {
+        return UI.toast("সঠিক Google Sheet লিঙ্ক পাওয়া যায়নি। লিঙ্কটি চেক করুন।", "err");
+      }
+      const sheetId = idMatch[1];
+      const gidMatch = url.match(/[#&?]gid=([0-9]+)/);
+      const gid = gidMatch ? gidMatch[1] : "0";
+      const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+
+      loadSheetBtn.disabled = true;
+      loadSheetBtn.innerHTML = `⏳ শিট থেকে লোড হচ্ছে...`;
+      if (sheetStatus) sheetStatus.innerHTML = `<span style="color:var(--cyan);">Google Sheet কানেক্ট করা হচ্ছে...</span>`;
+
+      try {
+        const resp = await fetch(exportUrl);
+        if (!resp.ok) {
+          throw new Error("Google Sheet ওপেন করা যায়নি। দয়া করে শিটের শেয়ারিং অপশনে 'Anyone with the link can view' অন করে দিন।");
+        }
+        const csvText = await resp.text();
+        const rows = csvText.split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
+
+        const lines = [];
+        let storedImported = [];
+        try {
+          storedImported = JSON.parse(localStorage.getItem("rtn_imported_sheet_lines") || "[]");
+        } catch (e) {
+          storedImported = [];
+        }
+        const newStored = [...storedImported];
+        let dupeCount = 0;
+
+        rows.forEach((row, idx) => {
+          if (idx === 0 && (row.toLowerCase().includes("email") || row.toLowerCase().includes("mail") || row.toLowerCase().includes("pass"))) {
+            return;
+          }
+          const cols = row.split(",").map((c) => c.replace(/^["']|["']$/g, "").trim()).filter(Boolean);
+          if (!cols.length) return;
+          const lineStr = cols.join(":");
+          const mailKey = cols[0].toLowerCase();
+
+          if (storedImported.includes(mailKey)) {
+            dupeCount++;
+            return;
+          }
+
+          if (lineStr.length > 3) {
+            lines.push(lineStr);
+            newStored.push(mailKey);
+          }
+        });
+
+        if (lines.length === 0) {
+          if (dupeCount > 0) {
+            UI.toast(`⚠️ শিটের সবকটি (${dupeCount}টি) অ্যাকাউন্ট ইতিমধ্যে আগে ইমপোর্ট করা হয়ে গেছে!`, "info");
+            if (sheetStatus) sheetStatus.innerHTML = `<span style="color:var(--amber);">⚠️ শিটের সবকটি (${dupeCount}টি) অ্যাকাউন্ট ইতিমধ্যে আগে লোড করা হয়েছে।</span>`;
+          } else {
+            UI.toast("Google Sheet এ কোনো বৈধ অ্যাকাউন্ট পাওয়া যায়নি।", "err");
+            if (sheetStatus) sheetStatus.innerHTML = `<span style="color:var(--red);">শিটে কোনো ডাটা পাওয়া যায়নি।</span>`;
+          }
+        } else {
+          const curVal = rawLogsArea.value.trim();
+          rawLogsArea.value = curVal ? curVal + "\n" + lines.join("\n") : lines.join("\n");
+          try {
+            localStorage.setItem("rtn_imported_sheet_lines", JSON.stringify(newStored));
+          } catch (e) {}
+
+          const total = countAccounts();
+          if (sheetStatus) {
+            sheetStatus.innerHTML = `<span style="color:var(--green); font-weight:700;">✓ ${lines.length}টি নতুন অ্যাকাউন্ট যুক্ত হয়েছে${dupeCount ? ` (${dupeCount}টি ডুপ্লিকেট বাদ)` : ""}</span>`;
+          }
+          UI.toast(`Google Sheet: ${lines.length}টি নতুন অ্যাকাউন্ট যুক্ত হয়েছে!`, "success");
+        }
+      } catch (err) {
+        console.error("Sheet import err:", err);
+        UI.toast(err.message || "Google Sheet পড়তে সমস্যা হয়েছে। শিটটির শেয়ারিং পারমিশন চেক করুন।", "err");
+        if (sheetStatus) sheetStatus.innerHTML = `<span style="color:var(--red);">শিট অ্যাক্সেস ব্যর্থ। নিশ্চিত করুন শিটটি Public ('Anyone with link can view') করা আছে।</span>`;
+      } finally {
+        loadSheetBtn.disabled = false;
+        loadSheetBtn.innerHTML = `📥 Sheet থেকে লোড করুন`;
+      }
+    });
+  }
+
   // ---------- Clear Button ----------
   if (clearBtn && form) {
     clearBtn.addEventListener("click", () => {

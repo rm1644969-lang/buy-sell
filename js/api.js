@@ -163,6 +163,40 @@ const API = (() => {
         const isLegacyDummy = ["P1001", "P1003", "P1004", "P1005"].includes(p.id) && (!Array.isArray(p.accountsPool) || p.accountsPool.length === 0);
         return !isLegacyDummy;
       });
+
+      // Automatically merge duplicate product listings for the same seller
+      if (store.products.length > 1) {
+        const mergedMap = new Map();
+        const cleanProducts = [];
+        store.products.forEach((p) => {
+          const sName = (p.seller?.name || "").toLowerCase().trim();
+          const pPrice = Number(p.price).toFixed(2);
+          const pTier = (p.tier || "").toLowerCase();
+          const key = `${sName}_${pPrice}_${pTier}`;
+          if (mergedMap.has(key)) {
+            const main = mergedMap.get(key);
+            if (Array.isArray(p.accountsPool)) {
+              if (!Array.isArray(main.accountsPool)) main.accountsPool = [];
+              const mainKeys = new Set(main.accountsPool.map((x) => (typeof x === "object" ? x.text.split(":")[0].toLowerCase().trim() : String(x).split(":")[0].toLowerCase().trim())));
+              p.accountsPool.forEach((item) => {
+                const itemKey = (typeof item === "object" ? item.text.split(":")[0].toLowerCase().trim() : String(item).split(":")[0].toLowerCase().trim());
+                if (!mainKeys.has(itemKey)) {
+                  mainKeys.add(itemKey);
+                  main.accountsPool.push(item);
+                }
+              });
+            }
+            main.stock = (main.accountsPool && main.accountsPool.length) ? main.accountsPool.length : (main.stock + p.stock);
+            main.sold = (main.sold || 0) + (p.sold || 0);
+            main.views = Math.max(main.views || 1, p.views || 1);
+            main.totalAdded = Math.max(main.totalAdded || main.stock, (main.totalAdded || 0) + (p.totalAdded || p.stock));
+          } else {
+            mergedMap.set(key, p);
+            cleanProducts.push(p);
+          }
+        });
+        store.products = cleanProducts;
+      }
       saveLocal();
     }
   } catch (e) {
@@ -482,6 +516,40 @@ const API = (() => {
         const price = Number(data.price) > 0 ? Number(data.price) : 0.50;
         const sellerName = (data.sellerName && data.sellerName.trim()) || store.user.name || "RTN Seller";
         const sellerWhatsapp = (data.sellerWhatsapp && data.sellerWhatsapp.trim()) || store.user.whatsapp || "01609166109";
+        // Deduplicate accounts: Filter out any account that already exists in any product pool
+        const getAccountKey = (acc) => {
+          const str = typeof acc === "object" ? acc.text : String(acc);
+          const first = str.split(":")[0].toLowerCase().trim();
+          return first || str.toLowerCase().trim();
+        };
+
+        const existingKeys = new Set();
+        (store.products || []).forEach((prod) => {
+          if (Array.isArray(prod.accountsPool)) {
+            prod.accountsPool.forEach((item) => {
+              existingKeys.add(getAccountKey(item));
+            });
+          }
+        });
+
+        const seenInBatch = new Set();
+        const uniqueAccounts = [];
+        let duplicateCount = 0;
+
+        accounts.forEach((acc) => {
+          const k = getAccountKey(acc);
+          if (existingKeys.has(k) || seenInBatch.has(k)) {
+            duplicateCount++;
+          } else {
+            seenInBatch.add(k);
+            uniqueAccounts.push(acc);
+          }
+        });
+
+        if (accounts.length > 0 && uniqueAccounts.length === 0) {
+          throw new Error(`❌ আপনার দেওয়া সবকটি (${accounts.length}টি) অ্যাকাউন্ট ইতিমধ্যে স্টকে আছে! একই অ্যাকাউন্ট দ্বিতীয়বার যোগ করা যাবে না।`);
+        }
+        accounts = uniqueAccounts;
         const stockCount = accounts.length > 0 ? accounts.length : (Number(data.stock) || 1);
 
         // Auto-save seller identity into store.user if default or unconfigured
@@ -514,23 +582,20 @@ const API = (() => {
           ? price
           : (data.sellerPayout != null ? Number(data.sellerPayout) : (price >= 0.50 ? 0.40 : Number((price * 0.80).toFixed(2))));
 
-        // Find matching predefined product pool by ID or Price
+        // Prevent Duplicate Product Cards: Check if an active product already exists for this seller & rate/tier
         let poolProduct = null;
         if (data.productId) {
           poolProduct = store.products.find((p) => p.id === data.productId);
         }
         if (!poolProduct) {
-          if (isExplicitAdminMeta) {
-            poolProduct = store.products.find((p) => p.id === "P1004" || (p.title && p.title.toLowerCase().includes("admin meta")));
-          } else if (tier === "horjin" || titleLower.includes("horjin")) {
-            poolProduct = store.products.find((p) => p.id === "P1005" || (p.title && p.title.toLowerCase().includes("horjin")));
-          } else if (Math.abs(price - 0.50) < 0.001) {
-            poolProduct = store.products.find((p) => p.id === "P1001" || (p.price === 0.50 && !p.title.includes("Admin")));
-          } else if (Math.abs(price - 0.40) < 0.001) {
-            poolProduct = store.products.find((p) => p.id === "P1003" || p.price === 0.40);
-          } else {
-            poolProduct = store.products.find((p) => Math.abs(p.price - price) < 0.001 && p.seller?.name?.toLowerCase() === sellerName.toLowerCase());
-          }
+          poolProduct = store.products.find((p) => {
+            const sName = (p.seller?.name || "").toLowerCase().trim();
+            const curSeller = sellerName.toLowerCase().trim();
+            const matchSeller = sName === curSeller || sName === "you";
+            const matchPrice = Math.abs(p.price - price) < 0.001;
+            const matchTier = (p.tier || "").toLowerCase() === (tier || "").toLowerCase() || (tier === "replace" && p.price === 0.50);
+            return matchSeller && matchPrice && matchTier;
+          });
         }
 
         const formattedAccounts = accounts.map((acc) => ({
@@ -542,13 +607,16 @@ const API = (() => {
           addedAt: new Date().toLocaleString()
         }));
 
-        if (data.isAdminDirect && poolProduct) {
-          // Admin directly adding stock to an existing pool
+        if (poolProduct) {
+          // MERGE STOCK INTO EXISTING PRODUCT (No duplicate card on homepage!)
           if (!Array.isArray(poolProduct.accountsPool)) poolProduct.accountsPool = [];
           poolProduct.accountsPool.push(...formattedAccounts);
           poolProduct.stock = poolProduct.accountsPool.length;
+          poolProduct.totalAdded = (poolProduct.totalAdded || 0) + accounts.length;
+          poolProduct.status = "live";
+          if (sellerWhatsapp) poolProduct.seller.whatsapp = sellerWhatsapp;
         } else {
-          // Create product listing (regular seller submits as pending for admin review)
+          // Create product listing only if none exists for this tier
           let bannerImg = "assets/meta-ai-050.svg";
           if (Math.abs(price - 0.55) < 0.001) bannerImg = "assets/meta-ai-050.svg";
           else if (Math.abs(price - 0.50) < 0.001) bannerImg = "assets/meta-ai-050.svg";
@@ -558,14 +626,14 @@ const API = (() => {
           const isHorjin = tier === "horjin" || titleLower.includes("horjin");
           const defaultTitle = isExplicitAdminMeta
             ? "Admin Meta 0.55 (অ্যাডমিন স্পেশাল)"
-            : (isHorjin ? "Meta AI Horjin 0.50 (Original)" : (Math.abs(price - 0.50) < 0.001 ? "Meta AI Account 0.50 (With Replace)" : `Meta AI Account ${price.toFixed(2)}`));
+            : (isHorjin ? "Meta AI Horjin 0.50 (Original)" : (Math.abs(price - 0.50) < 0.001 ? "Meta AI Account 0.50 (With Replace / ২৪ ঘণ্টা ফুল রিপ্লেস)" : `Meta AI Account ${price.toFixed(2)}`));
 
           const newProductListing = {
             id: isExplicitAdminMeta && data.isAdminDirect ? "P1004" : ("P" + (3000 + store.products.length + 1)),
-            title: data.title || (poolProduct ? poolProduct.title : defaultTitle),
+            title: data.title || defaultTitle,
             price: price,
             sellerPayout: sellerPayout,
-            category: data.category || (poolProduct ? poolProduct.category : "meta-ai"),
+            category: data.category || "meta-ai",
             userId: store.user.id,
             seller: {
               id: store.user.id,
@@ -578,18 +646,22 @@ const API = (() => {
             emoji: isExplicitAdminMeta ? "👑" : (isHorjin ? "💎" : "🤖"),
             image: bannerImg,
             stock: stockCount,
-            status: data.isAdminDirect ? "live" : "pending",
+            status: "live",
             views: 1,
             sold: 0,
-            tier: tier || (isExplicitAdminMeta ? "admin055" : (isHorjin ? "horjin" : "general")),
-            targetPoolId: poolProduct ? poolProduct.id : null,
-            badge: isExplicitAdminMeta ? "👑 Admin Pool" : (isHorjin ? "💎 Horjin Original" : (Math.abs(price - 0.50) < 0.001 ? "🛡️ 24h Replace" : "⚡ Instant")),
-            description: data.description || (poolProduct ? poolProduct.description : "Active Meta AI accounts with instant auto-delivery."),
+            tier: tier || (isExplicitAdminMeta ? "admin055" : (isHorjin ? "horjin" : "replace")),
+            targetPoolId: null,
+            badge: isExplicitAdminMeta ? "👑 Admin Pool" : (isHorjin ? "💎 Horjin Original" : "🛡️ 24h Replace"),
+            description: data.description || "Active Meta AI accounts with instant auto-delivery.",
             accountsPool: formattedAccounts,
             createdAt: new Date().toISOString()
           };
           store.products.unshift(newProductListing);
           poolProduct = newProductListing;
+        }
+
+        if (duplicateCount > 0 && typeof UI !== "undefined" && UI.toast) {
+          UI.toast(`⚠️ ${duplicateCount}টি ডুপ্লিকেট অ্যাকাউন্ট স্বয়ংক্রিয়ভাবে বাদ দেওয়া হয়েছে।`, "info");
         }
 
         // Register or update seller profile automatically in sellers directory
@@ -1805,19 +1877,36 @@ const API = (() => {
     // Dashboard Overview
     getDashboard() {
       return wait().then(() => {
-        const isMine = (p) => !p.seller || p.seller.name === store.user.name || p.seller.name === "You";
+        const myName = (store.user?.name || "").toLowerCase().trim();
+        const savedSeller = (localStorage.getItem("meta_ai_seller_name") || "").toLowerCase().trim();
+
+        if ((!store.user.name || store.user.name === "New User") && savedSeller) {
+          store.user.name = localStorage.getItem("meta_ai_seller_name");
+        }
+
+        const isMine = (p) => {
+          const s = (p.seller?.name || "").toLowerCase().trim();
+          return !s || s === "you" || s === myName || (savedSeller && s === savedSeller) || (store.user?.name && s === store.user.name.toLowerCase().trim());
+        };
         const mine = store.products.filter(isMine);
+        const mySellerOrders = store.orders.filter((o) => {
+          const s = (o.seller || "").toLowerCase().trim();
+          return s === "you" || s === myName || (savedSeller && s === savedSeller);
+        });
+
+        const totalSoldUnits = mine.reduce((acc, p) => acc + (Number(p.sold) || 0), 0);
+
         return {
           balance: store.wallet.balance,
           pendingWithdraw: store.wallet.pendingWithdraw,
           myProducts: mine.length,
           pendingProducts: mine.filter((p) => p.status === "pending").length,
           liveProducts: mine.filter((p) => p.status === "live").length,
-          totalSales: store.user.salesCount,
+          totalSales: totalSoldUnits || mySellerOrders.length || store.user.salesCount || 0,
           ordersAsBuyer: store.orders.filter((o) => o.buyer === "You").length,
-          ordersAsSeller: store.orders.filter((o) => o.seller === "You" || o.seller === store.user.name).length,
-          rating: store.user.rating,
-          ratingCount: store.user.ratingCount,
+          ordersAsSeller: mySellerOrders.length,
+          rating: store.user.rating || 5.0,
+          ratingCount: store.user.ratingCount || 1,
           recentProducts: clone(mine.slice(0, 5)),
           recentOrders: clone(store.orders.slice(0, 5)),
           recentTxns: clone(store.transactions.slice(0, 5))

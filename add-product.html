@@ -130,6 +130,20 @@
         
         <textarea class="textarea mono" name="rawLogs" id="rawLogsArea" style="font-size:12.5px; height:130px; background:var(--surface-2); color:var(--text); border-color:var(--border);" placeholder="user01@outlook.com:Pass2026:COOKIE_SESS_01&#10;user02@outlook.com:Pass2026:COOKIE_SESS_02&#10;user03@outlook.com:Pass2026:COOKIE_SESS_03" required></textarea>
 
+        <!-- Google Sheet Import Option -->
+        <div style="background:var(--surface-2); padding:12px 14px; border-radius:8px; border:1px solid var(--border); margin-top:10px;">
+          <div class="flex ac gap8 mb6">
+            <span style="font-size:17px;">📊</span>
+            <b style="color:var(--cyan); font-size:13px;">Google Sheet থেকে সরাসরি লোড (Auto Import from Sheet)</b>
+            <span class="badge green no-dot" style="font-size:10px; margin-left:auto;">ডুপ্লিকেট প্রটেকশন</span>
+          </div>
+          <div class="flex gap8" style="flex-wrap:wrap;">
+            <input type="url" id="googleSheetUrlInput" class="input" placeholder="Google Sheet লিঙ্ক পেস্ট করুন (যেমন: https://docs.google.com/spreadsheets/d/...)" style="flex:1; min-width:260px; font-size:12px;">
+            <button type="button" class="btn btn-outline btn-sm" id="loadGoogleSheetBtn" style="font-weight:700;">📥 Sheet থেকে লোড করুন</button>
+          </div>
+          <div class="fs11 dim mt4" id="sheetStatusLabel">শিটটি 'Anyone with the link can view' করা থাকতে হবে। পূর্বে লোড করা অ্যাকাউন্ট স্বয়ংক্রিয়ভাবে বাদ দেওয়া হবে।</div>
+        </div>
+
         <!-- Fast File Alternative -->
         <div class="flex ac jb mt10" style="flex-wrap:wrap; gap:10px; background:var(--surface-2); padding:10px 14px; border-radius:8px; border:1px solid var(--border);">
           <div class="flex ac gap8 fs13 muted">
