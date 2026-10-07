@@ -452,10 +452,14 @@ const API = (() => {
       });
     },
 
-    // Products
     getProducts({ status = "live", categoryId = null, query = "" } = {}) {
       return wait().then(() => {
-        let list = store.products.filter((p) => !status || p.status === status || status === "all");
+        let list = store.products.filter((p) => {
+          if (p.status === "rejected") return false;
+          if (!status || status === "all") return true;
+          if (status === "live") return p.status === "live" || p.status === "pending" || !p.status;
+          return p.status === status;
+        });
         if (categoryId) list = list.filter((p) => p.category === categoryId);
         if (query) {
           const q = query.toLowerCase();

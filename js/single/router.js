@@ -6,6 +6,9 @@
 const Router = (() => {
   const ROUTES = {
     "":            { tpl: "tpl-home",         nav: "marketplace",  title: "RTN BACKUP GROUP — Meta AI Buy & Sell Marketplace" },
+    "home":        { tpl: "tpl-home",         nav: "marketplace",  title: "RTN BACKUP GROUP — Meta AI Buy & Sell Marketplace" },
+    "marketplace": { tpl: "tpl-home",         nav: "marketplace",  title: "RTN BACKUP GROUP — Meta AI Buy & Sell Marketplace" },
+    "browse":      { tpl: "tpl-home",         nav: "marketplace",  title: "RTN BACKUP GROUP — Meta AI Buy & Sell Marketplace" },
     "dashboard":   { tpl: "tpl-dashboard",    nav: "dashboard",    title: "Dashboard — RTN BACKUP GROUP" },
     "product":     { tpl: "tpl-product",      nav: "marketplace",  title: "Product Details — RTN BACKUP GROUP" },
     "add-product": { tpl: "tpl-add",          nav: "add-product",  title: "Add Product — RTN BACKUP GROUP" },
@@ -34,7 +37,7 @@ const Router = (() => {
 
   function render() {
     const name = currentName();
-    const route = ROUTES[name];
+    const route = ROUTES[name] || ROUTES[""];
     // remove existing page
     document.querySelector(".main > .page")?.remove();
     // inject template (contains the full <div class="page">…)
@@ -45,7 +48,8 @@ const Router = (() => {
     document.title = route.title;
     setActiveNav(route.nav);
     updatePendingBadge();
-    (INIT[name] || (() => {}))();
+    const pageFn = INIT[name] || ((name === "" || name === "home" || name === "marketplace" || name === "browse") ? (INIT[""] || INIT["home"] || window.initHome) : null);
+    if (typeof pageFn === "function") pageFn();
     window.scrollTo(0, 0);
   }
 

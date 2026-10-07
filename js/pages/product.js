@@ -61,12 +61,25 @@
                   <div class="pc-stock ${p.stock <= 0 ? 'out' : p.stock <= 50 ? 'low' : 'in'}">${p.stock <= 0 ? 'Out of stock' : `${p.stock.toLocaleString()} available`}</div>
                 </div>
 
-                <div class="flex ac jb mt16 fs13">
-                  <span class="muted">Order Quantity</span>
-                  <div class="qty-box" style="display:flex; align-items:center; gap:10px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:4px 10px;">
-                    <button id="qMinus" style="font-size:18px; color:var(--text-2); padding:0 6px;">−</button>
-                    <b id="qVal" style="font-size:16px; min-width:32px; text-align:center;">1</b>
-                    <button id="qPlus" style="font-size:18px; color:var(--text-2); padding:0 6px;">+</button>
+                <div class="flex ac jb mt16 fs13" style="flex-wrap:wrap; gap:8px;">
+                  <span class="muted" style="font-weight:600;">Order Quantity:</span>
+                  <div class="qty-box" style="display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:3px 6px;">
+                    <button id="qMinus" type="button" style="font-size:18px; color:var(--text-2); padding:0 8px; background:transparent; border:none; cursor:pointer; font-weight:800; border-radius:4px; line-height:1;">−</button>
+                    <input id="qInput" type="number" min="1" max="${p.stock <= 0 ? 1 : p.stock}" value="1" style="width:68px; text-align:center; font-size:16px; font-weight:800; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:#fff; padding:5px 0; -moz-appearance:textfield;" title="টাইপ করে আপনার পছন্দের পরিমাণ লিখুন" />
+                    <button id="qPlus" type="button" style="font-size:18px; color:var(--text-2); padding:0 8px; background:transparent; border:none; cursor:pointer; font-weight:800; border-radius:4px; line-height:1;">+</button>
+                    <button id="qMaxBtn" type="button" class="btn btn-xs" style="background:rgba(255,183,3,0.15); color:var(--amber); border:1px solid rgba(255,183,3,0.4); font-size:11px; font-weight:800; padding:4px 8px; border-radius:5px; cursor:pointer;" title="সবগুলো স্টক একসাথে সিলেক্ট করুন">MAX</button>
+                  </div>
+                </div>
+
+                <!-- Quick Quantity Preset Badges -->
+                <div class="quick-qty-bar flex ac jb mt8" style="background:rgba(255,255,255,0.02); padding:6px 10px; border-radius:8px; border:1px dashed var(--border); flex-wrap:wrap; gap:6px;">
+                  <span class="dim fs11 fw600">Quick Select:</span>
+                  <div class="flex ac gap6" id="quickPillContainer">
+                    <button type="button" class="badge dim q-pill on" data-qty="1" style="cursor:pointer; border:1px solid var(--accent); padding:3px 8px; font-size:11.5px;">1 pc</button>
+                    ${p.stock >= 5 ? `<button type="button" class="badge dim q-pill" data-qty="5" style="cursor:pointer; border:1px solid var(--border); padding:3px 8px; font-size:11.5px;">5 pcs</button>` : ""}
+                    ${p.stock >= 10 ? `<button type="button" class="badge dim q-pill" data-qty="10" style="cursor:pointer; border:1px solid var(--border); padding:3px 8px; font-size:11.5px;">10 pcs</button>` : ""}
+                    ${p.stock >= 20 ? `<button type="button" class="badge dim q-pill" data-qty="20" style="cursor:pointer; border:1px solid var(--border); padding:3px 8px; font-size:11.5px;">20 pcs</button>` : ""}
+                    ${p.stock > 1 ? `<button type="button" class="badge amber q-pill" data-qty="${p.stock}" style="cursor:pointer; border:1px solid rgba(255,183,3,0.4); padding:3px 8px; font-size:11.5px; font-weight:700;">All (${p.stock})</button>` : ""}
                   </div>
                 </div>
 
@@ -114,24 +127,59 @@
             </div>
           </div>`;
 
-        // Quantity logic
+        // Quantity logic (Direct Input, MAX Button & Presets)
         let qty = 1;
-        const qVal = document.getElementById("qVal");
+        const maxStock = Math.max(1, p.stock || 1);
+        const qInput = document.getElementById("qInput");
         const total = document.getElementById("totalVal");
         const affordText = document.getElementById("walletAffordText");
 
         const setQty = (n) => {
-          qty = Math.max(1, Math.min(n, Math.max(1, p.stock)));
-          qVal.textContent = qty;
+          const parsed = parseInt(n, 10);
+          qty = isNaN(parsed) || parsed < 1 ? 1 : Math.min(parsed, maxStock);
+          if (qInput) qInput.value = qty;
           const cost = Number((p.price * qty).toFixed(2));
-          total.textContent = UI.money(cost);
+          if (total) total.textContent = UI.money(cost);
           if (affordText) {
             affordText.style.color = wallet.balance >= cost ? "var(--green)" : "var(--red)";
           }
+          document.querySelectorAll(".q-pill").forEach((pill) => {
+            const pillQty = Number(pill.dataset.qty);
+            if (pillQty === qty) {
+              pill.classList.add("on");
+              pill.style.borderColor = "var(--accent)";
+            } else {
+              pill.classList.remove("on");
+              pill.style.borderColor = pillQty === maxStock ? "rgba(255,183,3,0.4)" : "var(--border)";
+            }
+          });
         };
 
-        document.getElementById("qMinus").onclick = () => setQty(qty - 1);
-        document.getElementById("qPlus").onclick = () => setQty(qty + 1);
+        document.getElementById("qMinus")?.addEventListener("click", () => setQty(qty - 1));
+        document.getElementById("qPlus")?.addEventListener("click", () => setQty(qty + 1));
+        document.getElementById("qMaxBtn")?.addEventListener("click", () => setQty(maxStock));
+
+        qInput?.addEventListener("input", (e) => {
+          const val = parseInt(e.target.value, 10);
+          if (!isNaN(val)) {
+            qty = Math.max(1, Math.min(val, maxStock));
+            const cost = Number((p.price * qty).toFixed(2));
+            if (total) total.textContent = UI.money(cost);
+            if (affordText) {
+              affordText.style.color = wallet.balance >= cost ? "var(--green)" : "var(--red)";
+            }
+          }
+        });
+
+        qInput?.addEventListener("change", (e) => {
+          setQty(e.target.value);
+        });
+
+        document.querySelectorAll(".q-pill").forEach((pill) => {
+          pill.addEventListener("click", () => {
+            setQty(Number(pill.dataset.qty));
+          });
+        });
 
         // Buy button click
         document.getElementById("buyBtn")?.addEventListener("click", () => {
