@@ -1221,6 +1221,32 @@ const API = (() => {
     getAllSellersForAdmin() {
       return wait(100).then(() => {
         if (!Array.isArray(store.sellers)) store.sellers = [];
+        // Auto-discover any seller from products if missing in sellers array
+        (store.products || []).forEach((p) => {
+          const sName = p.seller?.name;
+          if (sName && !store.sellers.some((s) => s.name.toLowerCase() === sName.toLowerCase())) {
+            store.sellers.push({
+              id: "usr_seller_" + Math.random().toString(36).slice(2, 8),
+              name: sName,
+              username: sName.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+              whatsapp: p.seller?.whatsapp || "",
+              photo: p.seller?.photo || null,
+              role: "Verified Seller",
+              verified: true,
+              isOfficial: sName.toLowerCase().includes("admin") || sName.toLowerCase().includes("ratan"),
+              isBanned: false,
+              rating: 5.0,
+              ratingCount: 1,
+              balance: 0.0,
+              memberSince: new Date().toISOString().split("T")[0],
+              totalAdded: p.stock || 0,
+              activeStock: p.stock || 0,
+              soldCount: p.sold || 0,
+              bio: `${sName} এর ভেরিফায়েড Meta AI স্টক ও শপ।`
+            });
+          }
+        });
+
         const sellersList = store.sellers.map((s) => {
           let poolStock = 0;
           let productCount = 0;
@@ -1245,6 +1271,7 @@ const API = (() => {
             activeStock: poolStock,
             totalAdded: Math.max(s.totalAdded || poolStock, poolStock),
             productCount,
+            totalProducts: productCount,
             reportsCount
           };
         });

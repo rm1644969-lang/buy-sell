@@ -6096,6 +6096,32 @@ const API = (() => {
     getAllSellersForAdmin() {
       return wait(100).then(() => {
         if (!Array.isArray(store.sellers)) store.sellers = [];
+        // Auto-discover any seller from products if missing in sellers array
+        (store.products || []).forEach((p) => {
+          const sName = p.seller?.name;
+          if (sName && !store.sellers.some((s) => s.name.toLowerCase() === sName.toLowerCase())) {
+            store.sellers.push({
+              id: "usr_seller_" + Math.random().toString(36).slice(2, 8),
+              name: sName,
+              username: sName.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+              whatsapp: p.seller?.whatsapp || "",
+              photo: p.seller?.photo || null,
+              role: "Verified Seller",
+              verified: true,
+              isOfficial: sName.toLowerCase().includes("admin") || sName.toLowerCase().includes("ratan"),
+              isBanned: false,
+              rating: 5.0,
+              ratingCount: 1,
+              balance: 0.0,
+              memberSince: new Date().toISOString().split("T")[0],
+              totalAdded: p.stock || 0,
+              activeStock: p.stock || 0,
+              soldCount: p.sold || 0,
+              bio: `${sName} এর ভেরিফায়েড Meta AI স্টক ও শপ।`
+            });
+          }
+        });
+
         const sellersList = store.sellers.map((s) => {
           let poolStock = 0;
           let productCount = 0;
@@ -6120,6 +6146,7 @@ const API = (() => {
             activeStock: poolStock,
             totalAdded: Math.max(s.totalAdded || poolStock, poolStock),
             productCount,
+            totalProducts: productCount,
             reportsCount
           };
         });
@@ -11527,9 +11554,8 @@ function initAdmin() {
       .map((s) => {
         const isBanned = !!s.isBanned;
         const activeStock = Number(s.activeStock) || 0;
-        const totalProducts = Number(s.totalProducts) || 0;
+        const totalProducts = Number(s.productCount || s.totalProducts) || 0;
         const sName = s.name || s.username || "Seller";
-        const avatar = s.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80";
 
         let statusBadge = "";
         if (isBanned) {
@@ -11544,7 +11570,7 @@ function initAdmin() {
           <tr data-seller="${UI.escape(sName)}">
             <td>
               <div class="flex ac gap8">
-                <img src="${UI.escape(avatar)}" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:1px solid var(--border);" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'">
+                ${UI.avatar(sName, s.photo, "sm")}
                 <div>
                   <div class="fw700">${UI.escape(sName)}</div>
                   <div class="fs11 dim">@${UI.escape(s.username || sName.toLowerCase().replace(/\\s+/g, ""))}</div>
@@ -11560,7 +11586,7 @@ function initAdmin() {
             <td>${statusBadge}</td>
             <td>
               <div class="flex ac gap6 flex-wrap">
-                <a href="../#/seller?name=${encodeURIComponent(sName)}" target="_blank" class="btn btn-outline btn-xs" title="View Store">🔗 Store</a>
+                <a href="#/seller?seller=${encodeURIComponent(sName)}" class="btn btn-outline btn-xs" title="View Store">🔗 Store</a>
                 ${
                   isBanned
                     ? `<button class="btn btn-outline btn-xs unban-seller-btn" data-seller="${UI.escape(sName)}" style="color:var(--emerald); border-color:var(--emerald);">✅ Unban</button>`

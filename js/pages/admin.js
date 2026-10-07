@@ -1342,9 +1342,8 @@
       .map((s) => {
         const isBanned = !!s.isBanned;
         const activeStock = Number(s.activeStock) || 0;
-        const totalProducts = Number(s.totalProducts) || 0;
+        const totalProducts = Number(s.productCount || s.totalProducts) || 0;
         const sName = s.name || s.username || "Seller";
-        const avatar = s.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80";
 
         let statusBadge = "";
         if (isBanned) {
@@ -1359,7 +1358,7 @@
           <tr data-seller="${UI.escape(sName)}">
             <td>
               <div class="flex ac gap8">
-                <img src="${UI.escape(avatar)}" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:1px solid var(--border);" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'">
+                ${UI.avatar(sName, s.photo, "sm")}
                 <div>
                   <div class="fw700">${UI.escape(sName)}</div>
                   <div class="fs11 dim">@${UI.escape(s.username || sName.toLowerCase().replace(/\\s+/g, ""))}</div>
@@ -1375,7 +1374,7 @@
             <td>${statusBadge}</td>
             <td>
               <div class="flex ac gap6 flex-wrap">
-                <a href="../seller.html?name=${encodeURIComponent(sName)}" target="_blank" class="btn btn-outline btn-xs" title="View Store">🔗 Store</a>
+                <a href="../#/seller?seller=${encodeURIComponent(sName)}" target="_blank" class="btn btn-outline btn-xs" title="View Store">🔗 Store</a>
                 ${
                   isBanned
                     ? `<button class="btn btn-outline btn-xs unban-seller-btn" data-seller="${UI.escape(sName)}" style="color:var(--emerald); border-color:var(--emerald);">✅ Unban</button>`
