@@ -7479,7 +7479,7 @@ const Router = (() => {
 
   function currentName() {
     const path = (location.hash.slice(1) || "/").split("?")[0];
-    const name = path.replace(/^\//, "");
+    const name = path.replace(/^\//, "").toLowerCase().trim();
     return ROUTES[name] ? name : "";
   }
 
@@ -7536,7 +7536,9 @@ const Router = (() => {
     { nav: "wallet", label: "Deposit & Withdraw", href: "#/wallet", icon: "wallet" },
     { nav: "transactions", label: "Transactions", href: "#/transactions", icon: "receipt" },
     { group: "Account" },
-    { nav: "profile", label: "My Profile", href: "#/profile", icon: "user" }
+    { nav: "profile", label: "My Profile", href: "#/profile", icon: "user" },
+    { group: "Administration" },
+    { nav: "admin", label: "Admin Control Center", href: "#/admin", icon: "shield" }
   ];
 
   function bootShell() {
